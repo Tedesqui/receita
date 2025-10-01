@@ -1,0 +1,9 @@
+{
+    "name": "reverse-recipe-ai-backend",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Backend para o Chef com IA - Receita Reversa",
+    "dependencies": {
+        "openai": "^4.0.0"
+    }
+}

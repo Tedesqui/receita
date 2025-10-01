@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>"Receita Reversa" - Chef com IA</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
+        body, html {
+            margin: 0; padding: 0; font-family: 'Poppins', sans-serif;
+            background: black; color: white; overflow: hidden;
+        }
+        video, canvas {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0;
+        }
+        canvas { display: none; }
+        #ui-container {
+            position: fixed; bottom: 0; left: 0; width: 100%; z-index: 2;
+        }
+        #controls {
+            padding: 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0));
+            text-align: center;
+        }
+        button#captureBtn {
+            background-color: #f59e0b; color: white; padding: 15px 30px; border: none;
+            border-radius: 50px; font-size: 18px; font-weight: 700; cursor: pointer;
+            transition: all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        button#captureBtn:hover:not(:disabled) { background-color: #d97706; transform: translateY(-2px); }
+        button:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+        
+        #optional-inputs { padding: 0 20px 20px 20px; display: flex; gap: 15px; justify-content: center; }
+        .input-group { flex: 1; max-width: 300px; }
+        .input-group input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: white; box-sizing: border-box; }
+
+        #output-panel {
+            background: #111; padding: 15px; max-height: 85vh; overflow-y: auto;
+            box-sizing: border-box; border-top: 1px solid #444;
+        }
+        .status-text { text-align: center; padding: 20px; font-size: 1.1em; }
+        .recipe-card {
+            background: #1e1e1e; border: 1px solid #444; border-radius: 12px;
+            padding: 20px; margin-bottom: 20px;
+        }
+        .recipe-card h2 { margin-top: 0; color: #f59e0b; }
+        .recipe-card h3 { border-bottom: 1px solid #444; padding-bottom: 5px; margin-top: 20px; }
+        .recipe-card ul, .recipe-card ol { padding-left: 20px; }
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="ui-container">
+        <div id="output-panel" style="display:none;"></div>
+        <div id="controls">
+            <div id="optional-inputs">
+                <div class="input-group">
+                    <input type="text" id="restricoes" placeholder="Restrições? (ex: vegetariano)">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="tipo_culinaria" placeholder="Tipo de Culinária? (ex: italiana)">
+                </div>
+            </div>
+            <button id="captureBtn">🍲 Criar Receita</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const outputPanel = document.getElementById("output-panel");
+        const controlsDiv = document.getElementById("controls");
+        const captureBtn = document.getElementById("captureBtn");
+        
+        async function startCamera() { try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } }); video.srcObject = stream; } catch (err) { alert("Erro ao acessar a câmera."); } }
+
+        function resetUI() {
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            outputPanel.style.display = 'none';
+            controlsDiv.style.display = 'block';
+            captureBtn.disabled = false;
+        }
+
+        captureBtn.addEventListener('click', async () => {
+            captureBtn.disabled = true;
+            
+            const MAX_WIDTH = 1024;
+            const scale = MAX_WIDTH / video.videoWidth;
+            canvas.width = MAX_WIDTH;
+            canvas.height = video.videoHeight * scale;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            video.style.display = 'none';
+            canvas.style.display = 'block';
+            controlsDiv.style.display = 'none';
+
+            outputPanel.innerHTML = `<div class="status-text">👨‍🍳 Pensando em uma receita deliciosa...</div>`;
+            outputPanel.style.display = 'block';
+
+            try {
+                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                const restricoes = document.getElementById('restricoes').value;
+                const tipo_culinaria = document.getElementById('tipo_culinaria').value;
+
+                const response = await fetch('/api/create-recipe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageDataUrl, restricoes, tipo_culinaria }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erro na API: ${response.statusText}`);
+                }
+                const data = await response.json();
+                renderRecipes(data);
+
+            } catch (error) {
+                outputPanel.innerHTML = `<div class="status-text" style="color:red;">❌ Ocorreu um erro. Tente novamente.</div>`;
+                setTimeout(resetUI, 3000);
+            }
+        });
+
+        function renderRecipes(data) {
+            if (!data.receitas || data.receitas.length === 0) {
+                outputPanel.innerHTML = `<div class="status-text">🤔 Não consegui criar uma receita com estes ingredientes. Tente uma foto com melhor iluminação.</div>`;
+                setTimeout(resetUI, 4000);
+                return;
+            }
+
+            let html = data.receitas.map(recipe => {
+                const ingredientesIdentificadosHTML = recipe.ingredientes_identificados.map(ing => `<li>${ing}</li>`).join('');
+                const ingredientesAdicionaisHTML = recipe.ingredientes_adicionais.map(ing => `<li>${ing}</li>`).join('');
+                const modoPreparoHTML = recipe.modo_preparo.map(step => `<li>${step}</li>`).join('');
+                
+                return `
+                    <div class="recipe-card">
+                        <h2>${recipe.titulo}</h2>
+                        <p><em>${recipe.descricao}</em></p>
+                        <p><strong>Tempo:</strong> ${recipe.tempo_preparo} | <strong>Dificuldade:</strong> ${recipe.dificuldade}</p>
+                        
+                        <h3>Ingredientes Usados da Foto</h3>
+                        <ul>${ingredientesIdentificadosHTML}</ul>
+                        
+                        <h3>Ingredientes Adicionais</h3>
+                        <ul>${ingredientesAdicionaisHTML}</ul>
+                        
+                        <h3>Modo de Preparo</h3>
+                        <ol>${modoPreparoHTML}</ol>
+                    </div>
+                `;
+            }).join('');
+
+            const retryButtonHTML = `<div style="padding: 20px;"><button onclick="resetUI()" id="captureBtn" style="width:100%;">Analisar Outros Ingredientes</button></div>`;
+            outputPanel.innerHTML = html + retryButtonHTML;
+        }
+
+        startCamera();
+    </script>
+</body>
+</html>
