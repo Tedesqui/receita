@@ -18,6 +18,7 @@
             position: fixed; bottom: 0; left: 0; width: 100%; z-index: 2;
         }
         #controls {
+            /* ✨ ALTERAÇÃO 1: Posição retornada para a original */
             padding: 20px;
             background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0));
             text-align: center;
@@ -33,17 +34,17 @@
         #optional-inputs { padding: 0 20px 20px 20px; display: flex; gap: 15px; justify-content: center; }
         .input-group { flex: 1; max-width: 300px; }
         
-        /* ✨ ALTERAÇÃO 1: Estilo unificado para input e textarea */
         .input-group input, .input-group textarea { 
-            width: 100%; 
-            padding: 10px; 
+            width: 100%;
+            /* ✨ ALTERAÇÃO 2: Padding vertical aumentado para dar mais altura interna (5px em cima + 5px embaixo = 10px) */
+            padding: 15px 10px; 
             border-radius: 8px; 
             border: 1px solid #444; 
             background: #222; 
             color: white; 
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif; /* Garante a mesma fonte */
-            resize: vertical; /* Permite redimensionar apenas na vertical */
+            font-family: 'Poppins', sans-serif;
+            resize: vertical;
         }
 
         #output-panel {
@@ -59,15 +60,14 @@
         .recipe-card h3 { border-bottom: 1px solid #444; padding-bottom: 5px; margin-top: 20px; }
         .recipe-card ul, .recipe-card ol { padding-left: 20px; }
 
-        /* ✨ ALTERAÇÃO 2: Media Query para telas pequenas (celulares) */
         @media (max-width: 600px) {
             #optional-inputs {
-                flex-direction: column; /* Empilha os itens verticalmente */
-                align-items: center;   /* Centraliza os itens empilhados */
+                flex-direction: column;
+                align-items: center;
             }
             .input-group {
-                width: 100%;           /* Faz cada grupo ocupar a largura total */
-                max-width: none;       /* Remove a largura máxima */
+                width: 100%;
+                max-width: none;
             }
         }
     </style>
