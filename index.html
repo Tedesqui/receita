@@ -33,10 +33,13 @@
         #optional-inputs { padding: 0 20px 20px 20px; display: flex; gap: 15px; justify-content: center; }
         .input-group { flex: 1; max-width: 300px; }
         
-        /* Altura dos containers restaurada para a versão anterior que funcionava */
+        /* ✨ SOLUÇÃO DEFINITIVA PARA O ALINHAMENTO ✨ */
         .input-group input, .input-group textarea { 
             width: 100%;
-            padding: 15px 10px; 
+            /* Padding superior reduzido para 5px (move o texto e o cursor para cima).
+               Padding inferior aumentado para 25px (compensa e mantém a altura total do campo).
+            */
+            padding: 5px 10px 25px; 
             border-radius: 8px; 
             border: 1px solid #444; 
             background: #222; 
@@ -70,11 +73,7 @@
             }
         }
 
-        /* ✨ ALTERAÇÃO AQUI: Move ESPECIFICAMENTE o texto do placeholder 10px para cima. ✨ */
-        .input-group textarea::placeholder {
-            position: relative;
-            top: -10px;
-        }
+        /* O seletor ::placeholder foi removido, pois era a causa do desalinhamento. */
 
     </style>
 </head>
