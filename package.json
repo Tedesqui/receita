@@ -4,6 +4,6 @@
     "private": true,
     "description": "Backend para o Chef com IA - Receita Reversa",
     "dependencies": {
-        "openai": "^4.0.0"
+        "@google/generative-ai": "gemini-2.5-flash"
     }
 }
