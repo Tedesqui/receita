@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { kv } from '@vercel/kv';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -28,24 +29,21 @@ export default async function handler(request, response) {
             return response.status(400).json({ error: 'A imagem é obrigatória.' });
         }
 
-        // --- SISTEMA DE CHECAGEM DE COTA GRATUITA (CONTRA FRAUDES) ---
+        // --- SISTEMA DE VALIDAÇÃO DE COTA GRATUITA SEGURO ---
         if (!isPremium) {
             const idDispositivo = deviceId || "dispositivo-desconhecido";
+            const chaveBanco = `uso:${idDispositivo}`;
 
-            /* Mapeamento de Integração com Banco de Dados (Firebase / Vercel KV / etc.):
-               Para tornar o limite 100% funcional, remova os comentários abaixo e conecte o seu banco de dados:
+            // Busca no Vercel KV a quantidade de consultas já feitas por este hardware específico
+            const usoAtual = (await kv.get(chaveBanco)) || 0;
 
-               const usoAtual = await seuBanco.get(`uso:${idDispositivo}`) || 0;
+            // Se o aparelho já realizou 5 ou mais consultas, bloqueia imediatamente o acesso à IA
+            if (usoAtual >= 5) {
+                return response.status(403).json({ limitReached: true });
+            }
 
-               if (usoAtual >= 5) {
-                   return response.status(403).json({ limitReached: true });
-               }
-
-               await seuBanco.set(`uso:${idDispositivo}`, usoAtual + 1);
-            */
-
-            // Para testes iniciais antes de configurar o banco, a lógica aceita a requisição.
-            // Quando atingir o limite no banco, mude o fluxo para retornar o status 403 com { limitReached: true }.
+            // Se o usuário ainda tem tentativas restantes, adiciona +1 ao contador do hardware no banco
+            await kv.set(chaveBanco, usoAtual + 1);
         }
 
         // --- PROMPT PARA O CHEF COM IA (RECEITA REVERSA) ---
@@ -102,7 +100,7 @@ export default async function handler(request, response) {
 
         // Inicializa o modelo Gemini adequado para visão e análise de imagem
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
