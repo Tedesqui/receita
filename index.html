@@ -119,13 +119,14 @@
     </div>
 
     <script>
-        // --- VARIÁVEL DE CONTROLE PREMIUM ---
+        // --- VARIÁVEIS DE CONTROLE PREMIUM E DISPOSITIVO ---
         let isUserPremium = false;
+        let userDeviceId = "dispositivo-desconhecido"; // Atualizado automaticamente pelo Android
 
-        // --- LÓGICA DE ASSINATURA (COMUNICAÇÃO COM JAVA) ---
         const btnPremium = document.getElementById('btn-premium');
         const premiumSuccess = document.getElementById('premium-success');
 
+        // Comunicação com o Android (Preço e Status Premium)
         window.updatePremiumPrice = function(priceString) {
             if (btnPremium) {
                 btnPremium.innerText = "Assinar Premium " + priceString;
@@ -133,13 +134,18 @@
         };
 
         window.setPremiumStatus = function(isPremium) {
-            isUserPremium = isPremium; // Salva o status do usuário
+            isUserPremium = isPremium; 
             if (isPremium) {
                 if (btnPremium) btnPremium.classList.add('hidden');
                 if (premiumSuccess) {
                     premiumSuccess.style.display = 'inline-block';
                 }
             }
+        };
+
+        // Recebe a injeção do Android_ID para vincular ao banco de dados e evitar fraudes
+        window.setDeviceId = function(id) {
+            userDeviceId = id;
         };
 
         const video = document.getElementById("video");
@@ -179,29 +185,26 @@
             setTimeout(() => { video.style.opacity = 1; }, 100);
         }
 
+        // Função auxiliar para exibir a tela de bloqueio quando a cota acabar
+        function showPremiumBlock(mensagem) {
+            video.style.opacity = 0;
+            setTimeout(() => { video.style.display = 'none'; }, 300);
+            controlsDiv.style.display = 'none';
+
+            outputPanel.innerHTML = `
+                <div class="premium-block">
+                    <p style="font-size: 50px; margin: 0;">⭐</p>
+                    <h3>Assinatura Necessária</h3>
+                    <p>${mensagem}</p>
+                    <button onclick="resetUI()" class="action-btn">🔙 Voltar para a Câmera</button>
+                </div>
+            `;
+            outputPanel.style.display = 'block';
+        }
+
         captureBtn.addEventListener('click', async () => {
             captureBtn.disabled = true;
             
-            // --- BLOQUEIO PREMIUM ---
-            // Se o usuário NÃO for premium, impede a foto e mostra o aviso
-            if (!isUserPremium) {
-                video.style.opacity = 0;
-                setTimeout(() => { video.style.display = 'none'; }, 300);
-                controlsDiv.style.display = 'none';
-
-                outputPanel.innerHTML = `
-                    <div class="premium-block">
-                        <p style="font-size: 50px; margin: 0;">⭐</p>
-                        <h3>Assinatura Necessária</h3>
-                        <p>Para o Chef IA analisar seus ingredientes e criar receitas exclusivas, por favor, assine o Premium tocando no botão no topo da tela.</p>
-                        <button onclick="resetUI()" class="action-btn">🔙 Voltar para a Câmera</button>
-                    </div>
-                `;
-                outputPanel.style.display = 'block';
-                return; // Interrompe a execução aqui
-            }
-            // ------------------------
-
             const MAX_WIDTH = 1024;
             const scale = MAX_WIDTH / video.videoWidth;
             canvas.width = MAX_WIDTH;
@@ -213,7 +216,7 @@
             canvas.style.display = 'block';
             controlsDiv.style.display = 'none';
 
-            outputPanel.innerHTML = `<div class="status-text">👨‍🍳 Pensando em uma receita deliciosa...</div>`;
+            outputPanel.innerHTML = `<div class="status-text">👨‍🍳 Analisando ingredientes e pensando em uma receita...</div>`;
             outputPanel.style.display = 'block';
 
             try {
@@ -224,13 +227,28 @@
                 const response = await fetch('/api/create-recipe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: imageDataUrl, restricoes, tipo_culinaria }),
+                    // Envia imagem, contexto, dados do dispositivo e status da assinatura para a Vercel
+                    body: JSON.stringify({ 
+                        image: imageDataUrl, 
+                        restricoes, 
+                        tipo_culinaria,
+                        deviceId: userDeviceId,
+                        isPremium: isUserPremium
+                    }),
                 });
+
+                const data = await response.json();
+
+                // Intercepta a resposta 403 da API indicando que as 5 consultas grátis acabaram
+                if (response.status === 403 && data.limitReached) {
+                    showPremiumBlock("Você atingiu o limite de 5 receitas gratuitas! Assine o Premium no botão acima para continuar criando pratos incríveis sem limites.");
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(`Erro na API: ${response.statusText}`);
                 }
-                const data = await response.json();
+                
                 renderRecipes(data);
 
             } catch (error) {
