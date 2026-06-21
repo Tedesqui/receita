@@ -1,8 +1,20 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Função auxiliar para converter a Data URL (Base64) enviada pelo frontend para o formato aceito pelo Gemini
+function fileToGenerativePart(dataUrl) {
+    const matches = dataUrl.match(/^data:(.+);base64,(.+)$/);
+    if (!matches) {
+        throw new Error('Formato de imagem inválido.');
+    }
+    return {
+        inlineData: {
+            data: matches[2],
+            mimeType: matches[1]
+        },
+    };
+}
 
 export default async function handler(request, response) {
     try {
@@ -10,9 +22,30 @@ export default async function handler(request, response) {
             return response.status(405).json({ error: 'Method Not Allowed' });
         }
 
-        const { image, restricoes, tipo_culinaria } = request.body;
+        const { image, restricoes, tipo_culinaria, deviceId, isPremium } = request.body;
+        
         if (!image) {
             return response.status(400).json({ error: 'A imagem é obrigatória.' });
+        }
+
+        // --- SISTEMA DE CHECAGEM DE COTA GRATUITA (CONTRA FRAUDES) ---
+        if (!isPremium) {
+            const idDispositivo = deviceId || "dispositivo-desconhecido";
+
+            /* Mapeamento de Integração com Banco de Dados (Firebase / Vercel KV / etc.):
+               Para tornar o limite 100% funcional, remova os comentários abaixo e conecte o seu banco de dados:
+
+               const usoAtual = await seuBanco.get(`uso:${idDispositivo}`) || 0;
+
+               if (usoAtual >= 5) {
+                   return response.status(403).json({ limitReached: true });
+               }
+
+               await seuBanco.set(`uso:${idDispositivo}`, usoAtual + 1);
+            */
+
+            // Para testes iniciais antes de configurar o banco, a lógica aceita a requisição.
+            // Quando atingir o limite no banco, mude o fluxo para retornar o status 403 com { limitReached: true }.
         }
 
         // --- PROMPT PARA O CHEF COM IA (RECEITA REVERSA) ---
@@ -41,11 +74,10 @@ export default async function handler(request, response) {
             promptText += `- Tipo de Culinária Desejada: Estilo livre, seja criativo.\n`;
         }
         
-        // Adicionando um toque local com base no nosso contexto.
         promptText += `Dica: Como estamos no Brasil, sinta-se à vontade para sugerir pratos com um toque brasileiro se os ingredientes permitirem.\n`;
 
         promptText += `
-        Formate sua resposta final estritamente como um único objeto JSON. O objeto deve conter uma chave "receitas", que é um ARRAY de objetos. Cada objeto de receita deve ter a seguinte estrutura:
+        Formate sua resposta final estritamente como um único objeto JSON. O objeto deve conter uma chave "receitas", que é um ARRAY de objetos. Cada objeto de receita deve ter a seguinte estrutura exata:
         {
           "receitas": [
             {
@@ -65,24 +97,21 @@ export default async function handler(request, response) {
         }
         `;
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: promptText },
-                        { type: "image_url", image_url: { "url": image } },
-                    ],
-                },
-            ],
-            max_tokens: 2500,
+        // Prepara o payload da imagem
+        const imagePart = fileToGenerativePart(image);
+
+        // Inicializa o modelo Gemini adequado para visão e análise de imagem
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const aiResultString = completion.choices[0].message.content;
-        const parsedResult = JSON.parse(aiResultString);
+        // Executa a chamada passando o prompt e a estrutura de imagem processada
+        const result = await model.generateContent([promptText, imagePart]);
+        const aiResponse = await result.response;
+        const aiResultString = aiResponse.text();
 
+        const parsedResult = JSON.parse(aiResultString);
         return response.status(200).json(parsedResult);
 
     } catch (error) {
